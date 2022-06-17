@@ -1,0 +1,140 @@
+#some of the following libraries need to be installed using pip
+
+from time import sleep
+#import library and to send information to google sheets
+import gspread
+#authentication for google sheets API
+from oauth2client.service_account import ServiceAccountCredentials
+from urllib.parse import urlparse
+import os.path
+from ctypes import sizeof
+import requests
+#library for webscraping
+from bs4 import BeautifulSoup
+
+#set up for the google sheets
+#**CHANGE THIS ACCORDING TO YOUR SHEETS AND YOUR AUTHENTICATION FILE**#
+
+sa = gspread.service_account(filename="secret_client.json")
+sh = sa.open("Scrapping")
+wks = sh.worksheet("Test")
+
+# URL from which pdfs to be downloaded* 
+url = "https://apcentral.collegeboard.org/courses/ap-computer-science-a/exam/past-exam-questions"
+#gets the main website, this is used again on line 57 to create the folder to hold the scrapped pdfs
+domain = urlparse(url).netloc
+  
+# Requests URL and get response object
+response = requests.get(url)
+  
+# Parse text 
+soup = BeautifulSoup(response.text, 'html.parser')
+  
+# Find all hyperlinks present on webpage
+links = soup.find_all('a')
+
+#function to make the file size of PDFs easier to read
+def convert_bytes(bytes_number):
+    tags = [ "Byte", "Kilobyte", "Megabyte", "Gigabyte", "Terabyte" ]
+ 
+    i = 0
+    double_bytes = bytes_number
+ 
+    while (i < len(tags) and  bytes_number >= 1024):
+            double_bytes = bytes_number / 1024.0
+            i = i + 1
+            bytes_number = bytes_number / 1024
+ 
+    return str(round(double_bytes, 2)) + " " + tags[i]
+
+
+#following are variable for the loops that will be used later in code
+i = 0
+n = 0
+num = 1
+col = 1
+colB = 1
+
+# create the file with the name of the website which the files come from
+#**CHANGE THE savePath ACCORDING TO YOUR LOCAL DEVICE**#
+
+savePath = 'C:/Users/Prana/Desktop/' + domain
+if not os.path.exists(savePath):
+    os.mkdir(savePath)
+
+#there is an if and elif statement since there are 2 different formats for the pdf urls on the website
+#For the 2 formats the only thing that changes is how the urls for the pdfs are handled
+for link in links:
+    #find the fird pdr url format
+    if ('.pdf' in link.get('href', [])and 'secure-media' in link.get('href', [])):
+        #variable to keep track of the file number script is on
+        i += 1
+        #get url for pdf
+        url = link.get('href')
+        response = requests.get(url)
+
+        #upload the file name to the google sheets
+        start = url.rindex("/")
+        end = url.index(".pdf")
+        partial = url[start+1:end:1]
+        wks.update(('A' + str(num)),partial)
+        num += 1
+
+        #upload the scrapped pdfs to local folder
+        fileName = partial + '.pdf'
+        completeName = os.path.join(savePath, fileName)    
+        pdf = open(completeName, 'wb')
+        pdf.write(response.content)
+        pdf.close()
+        file_size = os.path.getsize('C:/Users/Prana/Desktop/apcentral.collegeboard.org/' + fileName)
+
+        #find size of the scrapped pdfs and upload to the google sheets
+        readSize = convert_bytes(file_size)
+        wks.update(('B' + str(col)),readSize)
+        col += 1
+        print("Main File" , i, "dowloaded")
+        datenum = partial.index('ap')+2
+
+        #find date of PDF and uplaod to sheets
+        date = "20" + (partial[datenum:datenum+2:1])
+        wks.update(('C' + str(colB)),date)
+        colB += 1
+        sleep(1)
+
+    elif('.pdf' in link.get('href', [])):
+        n += 1
+        #get url for pdf
+        partUrl = link.get('href')
+        fullUrl = ("https://apcentral.collegeboard.org" + partUrl)
+
+        #upload the file name to the google sheets
+        start = fullUrl.rindex("/")
+        end = fullUrl.index(".pdf")
+        partial2 = fullUrl[start+1:end:1]
+        wks.update(('A' + str(num)),partial2)
+        num += 1
+
+         #upload the scrapped pdfs to local folder
+        fileName2 = partial2 + '.pdf'
+        response2 = requests.get(fullUrl)
+        completeName2 = os.path.join(savePath, fileName2)
+        pdf = open(completeName2, 'wb')
+        pdf.write(response2.content)
+        pdf.close()
+        file_size = os.path.getsize('C:/Users/Prana/Desktop/apcentral.collegeboard.org/' + fileName2)
+
+        #Read size and upload to google sheets
+        readSize = convert_bytes(file_size)
+        wks.update(('B' + str(col)),readSize)
+        col += 1
+        print("Alt File" , n, "dowloaded")
+        datenum = partial2.index('ap')+2
+
+        #find date of PDF and uplaod to sheets
+        date = "20" + (partial2[datenum:datenum+2:1])
+        wks.update(('C' + str(colB)),date)
+        colB += 1
+
+
+       
+
